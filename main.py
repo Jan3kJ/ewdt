@@ -1,29 +1,32 @@
 # eWDT MicroPython Firmware for RP2040-Plus
 # Implements requirements from README, using VBUS detection via ADC1 (GP27)
 
-import machine
+from machine import PWM, Pin, ADC
 import time
 
 # Pin assignments (adjust if needed)
 SERVO_PIN = 13         # PWM output for servo
 RELAY_PIN = 15         # Digital output for relay
-LED_PIN = 25           # Digital output for switch LED
+LED_PIN = 25           # Digital output for internal LED
+BUTTON_LED_PIN = 14    # Digital output for BUTTON LED
 BATTERY_ADC_PIN = 26   # ADC0 for battery voltage divider
 VREF_ADC_PIN = 29      # ADC3 for VSYS detection (via internal voltage divider)
 
 # Constants
 SERVO_ON_TIME = 5  # seconds
-LOW_BATTERY_VOLTAGE = 3.4  # volts
-FULL_BATTERY_VOLTAGE = 4.1  # volts
-LED_BLINK_INTERVAL = 0.5  # seconds
+LOW_BATTERY_VOLTAGE = 3.7  # volts, >10% capacity
+FULL_BATTERY_VOLTAGE = 4.1  # volts, ~90% capacity
+LED_BLINK_INTERVAL_SLOW = 2  # seconds
+LED_BLINK_INTERVAL_FAST = 0.5  # seconds
 
 # Setup pins
-servo = machine.PWM(machine.Pin(SERVO_PIN))
+servo = PWM(Pin(SERVO_PIN))
 servo.freq(50)
-relay = machine.Pin(RELAY_PIN, machine.Pin.OUT)
-led = machine.Pin(LED_PIN, machine.Pin.OUT)
-battery_adc = machine.ADC(BATTERY_ADC_PIN)
-vref_adc = machine.ADC(VREF_ADC_PIN)
+relay = Pin(RELAY_PIN, Pin.OUT)
+led = Pin(LED_PIN, Pin.OUT)
+button_led = Pin(BUTTON_LED_PIN, Pin.OUT)
+battery_adc = ADC(BATTERY_ADC_PIN)
+vref_adc = ADC(VREF_ADC_PIN)
 
 
 # Helper: Read battery voltage (adjust conversion for your divider)
@@ -45,6 +48,14 @@ def is_usb_connected():
     vref_voltage = read_vref_voltage()
     return vref_voltage > 4.5 # vref_adc higher than 4.5V means USB connected
 
+
+def led_on():
+    led.on()  # interal LED for debugging
+    button_led.on()
+
+def led_off():
+    led.off()
+    button_led.off()
 
 # Helper: Set servo speed for continuous rotation
 def set_servo_speed(speed):
@@ -68,37 +79,37 @@ def set_servo_speed(speed):
 # Helper: Blink LED
 def blink_led(times, interval):
     for _ in range(times):
-        led.on()
+        led_on()
         time.sleep(interval)
-        led.off()
-        time.sleep(interval)
+        led_off()
+        time.sleep(int(interval/2))
 
 
 # Charging mode: LED blinks slowly until battery is full, then off
 def charging_mode():
     while is_usb_connected():
         if read_battery_voltage() < FULL_BATTERY_VOLTAGE:
-            blink_led(30, LED_BLINK_INTERVAL)
+            blink_led(30, LED_BLINK_INTERVAL_SLOW)
         else:
             # fully charged and usb still connected
-            led.on()
+            led_on()
             relay.off()
             time.sleep(2)
 
     # if unplugged befor fully charged
-    led.off()
+    led_off()
     relay.off()  # Ensure relay is off after charging
 
 
 def normal_mode():
     # Start servo and relay
-    led.on()
+    led_on()
     set_servo_speed(1.0)  # Full speed forward
     time.sleep(SERVO_ON_TIME)
     set_servo_speed(0)    # Stop
-    led.off()
+    led_off()
     if read_battery_voltage() < LOW_BATTERY_VOLTAGE:
-        blink_led(4, 0.25)  # 2 seconds total
+        blink_led(4, LED_BLINK_INTERVAL_FAST)  
     relay.off()  # Ensure relay is off after operation
 
 
