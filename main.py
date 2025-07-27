@@ -5,10 +5,10 @@ from machine import PWM, Pin, ADC
 import time
 
 # Pin assignments (adjust if needed)
-SERVO_PIN = 13         # PWM output for servo
-RELAY_PIN = 15         # Digital output for relay
+SERVO_PIN = 15         # PWM output for servo
+RELAY_PIN = 5         # Digital output for relay
 LED_PIN = 25           # Digital output for internal LED
-BUTTON_LED_PIN = 14    # Digital output for BUTTON LED
+BUTTON_LED_PIN = 9    # Digital output for BUTTON LED
 BATTERY_ADC_PIN = 26   # ADC0 for battery voltage divider
 VREF_ADC_PIN = 29      # ADC3 for VSYS detection (via internal voltage divider)
 
@@ -18,6 +18,8 @@ LOW_BATTERY_VOLTAGE = 3.7  # volts, >10% capacity
 FULL_BATTERY_VOLTAGE = 4.1  # volts, ~90% capacity
 LED_BLINK_INTERVAL_SLOW = 2  # seconds
 LED_BLINK_INTERVAL_FAST = 0.5  # seconds
+ADC_STABILIZATION_TIME = 0.1  # seconds for ADC to stabilize
+ADC_READINGS_COUNT = 5  # number of readings to average for stability
 
 # Setup pins
 servo = PWM(Pin(SERVO_PIN))
@@ -29,33 +31,77 @@ battery_adc = ADC(BATTERY_ADC_PIN)
 vref_adc = ADC(VREF_ADC_PIN)
 
 
+# Helper: Initialize ADC with proper stabilization
+def init_adc():
+    """Initialize ADC and wait for stabilization"""
+    # Take a few readings to warm up the ADC
+    for _ in range(3):
+        battery_adc.read_u16()
+        vref_adc.read_u16()
+        time.sleep(0.01)
+    
+    # Wait for proper stabilization
+    time.sleep(ADC_STABILIZATION_TIME)
+
+
+# Helper: Read ADC with averaging for stability
+def read_adc_stable(adc, samples=ADC_READINGS_COUNT):
+    """Read ADC multiple times and return average for stability"""
+    readings = []
+    for _ in range(samples):
+        readings.append(adc.read_u16())
+        time.sleep(0.001)  # Small delay between readings
+    
+    # Simple average of all readings
+    return sum(readings) / len(readings)
+
+
 # Helper: Read battery voltage (adjust conversion for your divider)
 def read_battery_voltage():
-    raw = battery_adc.read_u16()
+    raw = read_adc_stable(battery_adc)
     voltage = (raw / 65535) * 3.3 * 2  # 2x for divider
-    return voltage
+    return round(voltage, 2)
 
 
 # Helper: Read VREF voltage (internal voltage divider)
 def read_vref_voltage():
-    raw = vref_adc.read_u16()
+    raw = read_adc_stable(vref_adc)
     voltage = (raw / 65535) * 3.3 * 3  # 3.3V internal reference, 3x for internal divider
-    return voltage
+    return round(voltage, 2)
 
 
-# Helper: Detect USB connection via VBUS (divider to ADC1)
+# Helper: Detect USB connection via VBUS (divider to ADC1) with multiple checks
 def is_usb_connected():
-    vref_voltage = read_vref_voltage()
-    return vref_voltage > 4.5 # vref_adc higher than 4.5V means USB connected
+    """Detect USB connection with multiple readings for reliability"""
+    # Take multiple readings to ensure stable detection
+    usb_detected_count = 0
+    total_checks = 3
+    
+    for _ in range(total_checks):
+        vref_voltage = read_vref_voltage()
+        if vref_voltage > 4.2:  # vref_adc higher than 4.2V means USB connected
+            usb_detected_count += 1
+        time.sleep(0.01)  # Small delay between checks
+    
+    # Require majority of readings to indicate USB connection
+    return usb_detected_count >= (total_checks // 2 + 1)
+
+
+def print_voltage():
+    if is_usb_connected():
+        print('VRef: {} V'.format(read_vref_voltage()))
+        print('VBat: {} V'.format(read_battery_voltage()))
 
 
 def led_on():
     led.on()  # interal LED for debugging
     button_led.on()
 
+
 def led_off():
     led.off()
     button_led.off()
+
 
 # Helper: Set servo speed for continuous rotation
 def set_servo_speed(speed):
@@ -76,12 +122,15 @@ def set_servo_speed(speed):
     print('duty cycle: ', duty)
     servo.duty_u16(duty)
 
+
 # Helper: Blink LED
-def blink_led(times, interval):
+def blink_led(times, interval, interrupt=False):
     for _ in range(times):
         led_on()
+        if interrupt and not is_usb_connected(): break
         time.sleep(interval)
         led_off()
+        if interrupt and not is_usb_connected(): break
         time.sleep(int(interval/2))
 
 
@@ -89,12 +138,15 @@ def blink_led(times, interval):
 def charging_mode():
     while is_usb_connected():
         if read_battery_voltage() < FULL_BATTERY_VOLTAGE:
-            blink_led(30, LED_BLINK_INTERVAL_SLOW)
+            blink_led(30, LED_BLINK_INTERVAL_SLOW, interrupt=True)
+            print_voltage()
         else:
             # fully charged and usb still connected
+            print('Battery fully charged')
+            print_voltage()
             led_on()
             relay.off()
-            time.sleep(2)
+            time.sleep(10)
 
     # if unplugged befor fully charged
     led_off()
@@ -116,14 +168,24 @@ def normal_mode():
 # Main loop
 def main():        
     relay.on()
+    led_on()  # recognize button press
+    
+    # Initialize ADC properly before making any decisions
+    print("Initializing ADC...")
+    init_adc()
+    
+    # Double-check USB connection with proper delay
+    print("Checking USB connection...")
     if is_usb_connected():
         print("USB connected")
+        print_voltage()
         charging_mode()
     else:
         print("USB not connected")
         normal_mode()
 
+    led_off()
     relay.off()  # Ensure relay is off after charging
     
-
+set_servo_speed(0)  # ensure servo is stopped when powered via usb
 main() 
