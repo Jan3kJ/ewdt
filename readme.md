@@ -1,6 +1,6 @@
 # Project eWDT
 
-An electric Weiss Distribution Technique (WDT) tool to evenly distribute coffee grounds in the portafilter. This is a remix of Damian's eWDT ([original model](https://www.printables.com/model/591918-ewdt)).
+An electric WDT tool to evenly distribute coffee grounds in the portafilter. This is a remix of Damian's eWDT ([original model](https://www.printables.com/model/591918-ewdt)).
 
 ## Overview
 This project automates the WDT process using a continuous rotation servo, relay, and a momentary switch with an integrated LED, all powered by a lithium battery and controlled by a Waveshare RP2040-Plus running MicroPython.
@@ -10,52 +10,64 @@ This project automates the WDT process using a continuous rotation servo, relay,
 - **5V Relay**
 - **MT3608 Adjustable DC-DC Boost Converter**
 - **Lithium Battery**
-- **Momentary Switch with Integrated LED**
+- **Momentary Switch with Integrated LED + 270Ω resistor**
 - **EF90D 360° Continuous Rotation Servo**
-- **Voltage Divider (2 × 100kΩ resistors for battery, 2 × 100kΩ for VBUS)**
+- **Voltage Divider (2 × 100kΩ resistors for battery)**
+
+## Schematic
+
+<img src="img/schematic.svg" alt="Schematic" width="500"/>
 
 ## Pin Assignments
 | Function                | RP2040 Pin | Notes                                      |
 |-------------------------|------------|--------------------------------------------|
-| Servo PWM               | GP15       | PWM capable                                |
-| Relay Control           | GP14       | Digital output                             |
-| Switch Input            | GP13       | Digital input, with pull-down resistor     |
-| Switch LED              | GP12       | Digital output                             |
+| Servo PWM               | GP15       | PWM output (50Hz)                          |
+| Relay Control           | GP5        | Digital output                             |
+| Internal LED            | GP25       | Digital output (onboard LED)               |
+| Switch LED              | GP9        | Digital output (external button LED)       |
 | Battery Voltage Sense   | GP26 (ADC0)| Analog input (via voltage divider)         |
-| VBUS Sense              | GP27 (ADC1)| Analog input (via voltage divider from VBUS)|
+| VSYS Sense         | GP29 (ADC3)| Analog input (via voltage divider from VSYS)|
 
 ## Wiring Diagram (Textual)
 - **Servo**: VCC (5V from boost), GND, Signal to GP15
-- **Relay**: VCC, GND, IN to GP14
-- **Switch**: One side to GND, other to GP13 (with pull-down)
-- **Switch LED**: Anode to GP12 (with resistor), cathode to GND
+- **Relay**: VCC, GND, IN to GP5
+- **Switch**: One side to GND, other to relay (see schematic)
+- **Switch LED**: Anode to GP9 (with resistor), cathode to GND
 - **Battery Voltage Divider**: Connect between battery + and GND, center tap to GP26
-- **VBUS Voltage Divider**: Connect between VBUS (USB 5V) and GND, center tap to GP27
+- **VSYS/USB Voltage Divider**: Connect between VSYS and GND, center tap to GP29
 
-## Functional Requirements
+## Functional Requirements (as implemented)
 ### Normal Operation
-- When the switch is pressed:
+- When the system is powered (button press):
     - The relay is activated, powering the system.
-    - The servo rotates continuously for 5 seconds (simulating a DC motor action).
-    - The switch LED is ON during this time.
-    - After 5 seconds, the servo stops, the relay is deactivated (cutting power), and the LED turns OFF.
-    - If battery voltage drops below 3.4V, after the servo stops, the switch LED blinks for 2 seconds.
+    - The servo rotates continuously for 5 seconds (full speed, adjustable in code).
+    - Both the internal LED (GP25) and the button LED (GP9) are ON during this time.
+    - After 5 seconds, the servo stops, LEDs turn OFF.
+    - If battery voltage drops below 3.7V, the LEDs blink rapidly for 2 seconds.
+    - The relay is deactivated (cutting power) after operation.
 - The relay always switches OFF after operation, cutting off battery power until the button is pressed again.
 
 ### Charging Mode
-- When USB is connected (VBUS detected):
+- When USB is connected (VSYS/ADC3 > 4.2V):
     - The battery charges.
     - The relay is OFF (system is powered down except for charging logic).
     - The servo cannot be started; switch presses are ignored.
-    - The switch LED blinks slowly (0.5s interval) until battery voltage reaches 4.1V, then turns OFF.
+    - The LEDs blink slowly (2s interval) until battery voltage reaches 4.1V, then stay ON for 10s, then turn OFF.
     - When charging is complete or USB is disconnected, the relay remains OFF.
 
-## Description
+## Firmware Details
+- Firmware is written in MicroPython and located in `main.py`.
+- Pin assignments and logic are defined at the top of the file.
 - Battery voltage is measured via a voltage divider (2 × 100kΩ resistors) to ADC0 (GP26).
-- USB VBUS is detected via a voltage divider (2 × 100kΩ resistors) to ADC1 (GP27).
-- The momentary switch connects the RP2040, MT3608, and relay with the positive terminal of the battery.
+- USB/VSYS is detected via internal voltage divider to ADC3 (GP29). If VSYS > 4.2V, USB is considered connected.
 - The relay is used to cut off all power to the system after each operation or charging session, maximizing battery life.
-- Firmware is written in MicroPython and located in `ewdt/ewdt_firmware.py`.
+- The servo is controlled by PWM (50Hz, duty cycle for stop/forward/reverse adjustable in code).
+- Both the internal LED and the button LED are used for status indication (on, off, blink fast/slow).
+- All ADC readings are averaged for stability.
+
+## State Chart
+
+<img src="img/states.svg" alt="State Chart" width="600"/>
 
 ## Usage Notes
 - **Upload the firmware** to your RP2040-Plus using a tool like Thonny or ampy.
