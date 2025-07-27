@@ -41,3 +41,5 @@ time.sleep(SERVO_ON_TIME)
 
 set_servo_speed(0)
 print('end')
+time.sleep(10)
+print('final')
