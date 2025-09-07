@@ -16,8 +16,8 @@ VREF_ADC_PIN = 29      # ADC3 for VSYS detection (via internal voltage divider)
 SERVO_ON_TIME = 7  # seconds, eWDT runtime 
 LOW_BATTERY_VOLTAGE = 3.7  # volts, >10% capacity
 FULL_BATTERY_VOLTAGE = 4.1  # volts, ~90% capacity
-LED_BLINK_INTERVAL_SLOW = 2  # seconds
-LED_BLINK_INTERVAL_FAST = 0.5  # seconds
+LED_BLINK_INTERVAL_SLOW = 3  # seconds
+LED_BLINK_INTERVAL_FAST = 0.8  # seconds
 ADC_STABILIZATION_TIME = 0.1  # seconds for ADC to stabilize
 ADC_READINGS_COUNT = 5  # number of readings to average for stability
 
@@ -50,7 +50,7 @@ def read_adc_stable(adc, samples=ADC_READINGS_COUNT):
     readings = []
     for _ in range(samples):
         readings.append(adc.read_u16())
-        time.sleep(0.001)  # Small delay between readings
+        time.sleep(0.01)  # Small delay between readings
     
     # Simple average of all readings
     return sum(readings) / len(readings)
@@ -127,11 +127,11 @@ def set_servo_speed(speed):
 def blink_led(times, interval, interrupt=False):
     for _ in range(times):
         led_on()
-        if interrupt and not is_usb_connected(): break
+        if interrupt and not is_usb_connected(): break  # interrupt if usb get disconnected
         time.sleep(interval)
         led_off()
-        if interrupt and not is_usb_connected(): break
-        time.sleep(int(interval/2))
+        if interrupt and not is_usb_connected(): break  # interrupt if usb get disconnected
+        time.sleep(interval/2)  # 1/2 of interval off looks better
 
 
 # Charging mode: LED blinks slowly until battery is full, then off
@@ -160,12 +160,13 @@ def normal_mode():
     time.sleep(SERVO_ON_TIME)
     set_servo_speed(0)    # Stop
     led_off()
+    time.sleep(ADC_STABILIZATION_TIME)  # small delay after servo is stopped to avoid wrong adc readings
     if read_battery_voltage() < LOW_BATTERY_VOLTAGE:
         blink_led(4, LED_BLINK_INTERVAL_FAST)  
     relay.off()  # Ensure relay is off after operation
 
 
-# Main loop
+# Main function
 def main():        
     relay.on()
     led_on()  # recognize button press
@@ -188,4 +189,8 @@ def main():
     relay.off()  # Ensure relay is off after charging
     
 set_servo_speed(0)  # ensure servo is stopped when powered via usb
-main() 
+main()
+
+# for testing, when running this file directly via MicroPico
+print_voltage()
+relay.off()
