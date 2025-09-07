@@ -29,20 +29,19 @@ This project automates the WDT process using a continuous rotation servo, relay,
 | VSYS Sense         | GP29 (ADC3)| Analog input (via voltage divider from VSYS)|
 
 ## Wiring Diagram (Textual)
-- **Servo**: VCC (5V from boost), GND, Signal to GP15
-- **Relay**: VCC, GND, IN to GP5
+- **Servo**: VCC (5.7V from boost converter), GND, Signal to GP15
+- **Relay**: VCC to 3V3, GND, IN to GP5
 - **Switch**: One side to GND, other to relay (see schematic)
 - **Switch LED**: Anode to GP9 (with resistor), cathode to GND
 - **Battery Voltage Divider**: Connect between battery + and GND, center tap to GP26
-- **VSYS/USB Voltage Divider**: Connect between VSYS and GND, center tap to GP29
 
 ## Functional Requirements (as implemented)
 ### Normal Operation
 - When the system is powered (button press):
     - The relay is activated, powering the system.
-    - The servo rotates continuously for 5 seconds (full speed, adjustable in code).
+    - The servo rotates continuously for 7 seconds (full speed, adjustable in code).
     - Both the internal LED (GP25) and the button LED (GP9) are ON during this time.
-    - After 5 seconds, the servo stops, LEDs turn OFF.
+    - After 7 seconds, the servo stops, LEDs turn OFF.
     - If battery voltage drops below 3.7V, the LEDs blink rapidly for 2 seconds.
     - The relay is deactivated (cutting power) after operation.
 - The relay always switches OFF after operation, cutting off battery power until the button is pressed again.
@@ -50,10 +49,10 @@ This project automates the WDT process using a continuous rotation servo, relay,
 ### Charging Mode
 - When USB is connected (VSYS/ADC3 > 4.2V):
     - The battery charges.
-    - The relay is OFF (system is powered down except for charging logic).
+    - The relay is switched ON.
     - The servo cannot be started; switch presses are ignored.
-    - The LEDs blink slowly (2s interval) until battery voltage reaches 4.1V, then stay ON for 10s, then turn OFF.
-    - When charging is complete or USB is disconnected, the relay remains OFF.
+    - The LEDs blink slowly (3s interval) until battery voltage reaches 4.1V, then stay ON for 10s, then turn OFF.
+    - When charging is complete or USB is disconnected, the relay is switched off.
 
 ## Firmware Details
 - Firmware is written in MicroPython and located in `main.py`.
