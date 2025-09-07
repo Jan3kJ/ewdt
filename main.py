@@ -13,7 +13,7 @@ BATTERY_ADC_PIN = 26   # ADC0 for battery voltage divider
 VREF_ADC_PIN = 29      # ADC3 for VSYS detection (via internal voltage divider)
 
 # Constants
-SERVO_ON_TIME = 5  # seconds
+SERVO_ON_TIME = 7  # seconds, eWDT runtime 
 LOW_BATTERY_VOLTAGE = 3.7  # volts, >10% capacity
 FULL_BATTERY_VOLTAGE = 4.1  # volts, ~90% capacity
 LED_BLINK_INTERVAL_SLOW = 2  # seconds
